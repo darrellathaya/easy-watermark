@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActionIcon, Alert, Box, Button, Center, Group, Loader, Stack, Text } from '@mantine/core';
+import { ActionIcon, Alert, Box, Button, Center, Group, Loader, Stack, Text, rem } from '@mantine/core';
 import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconFileUpload } from '@tabler/icons-react';
 import { useWatermarkStore } from '../state/store';
 import { useFileIngest } from '../state/useFileIngest';
@@ -34,6 +34,7 @@ export function PreviewPane() {
   // unmounts as `selected`'s status changes, so a plain useRef wouldn't
   // reliably re-trigger the observer effects below.
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const [loaded, setLoaded] = useState<LoadedDoc | null>(null);
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
@@ -280,13 +281,66 @@ export function PreviewPane() {
 
   if (!selected) {
     return (
-      <Center h="100%">
-        <Stack align="center" gap="sm">
-          <IconFileUpload size={64} stroke={1} opacity={0.5} />
-          <Text c="dimmed">Drop in a PDF to get started</Text>
-          <Button variant="light" onClick={() => inputRef.current?.click()}>
-            Upload PDF
-          </Button>
+      // The whole centre pane is the drop target, not just the copy in the
+      // middle of it: `p="md"` keeps the dashed outline inset while the
+      // handlers still cover every pixel out to the pane's edges.
+      <Box
+        h="100%"
+        p="md"
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOver={(e) => {
+          // Required: without preventDefault the browser refuses the drop
+          // and falls back to navigating to the dropped file.
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          // dragleave also fires when the pointer crosses onto a *child*,
+          // so only a leave that exits the pane entirely counts.
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (e.dataTransfer.files) ingestFiles(e.dataTransfer.files);
+        }}
+        style={{ display: 'flex', cursor: 'pointer' }}
+      >
+        <Box
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: rem(12),
+            border: `2px dashed ${dragOver ? 'var(--mantine-color-violet-5)' : 'var(--mantine-color-dark-4)'}`,
+            background: dragOver ? 'var(--mantine-color-dark-6)' : 'transparent',
+            transition: 'border-color 120ms ease, background-color 120ms ease',
+          }}
+        >
+          <Stack align="center" gap="sm">
+            <IconFileUpload size={64} stroke={1} opacity={dragOver ? 0.9 : 0.5} />
+            <Text c={dragOver ? undefined : 'dimmed'}>
+              {dragOver ? 'Drop to add your PDFs' : 'Drop in a PDF to get started'}
+            </Text>
+            {/* Stays a real button so the picker is still keyboard-reachable;
+                stopPropagation keeps the pane's own click from firing too. */}
+            <Button
+              variant="light"
+              onClick={(e) => {
+                e.stopPropagation();
+                inputRef.current?.click();
+              }}
+            >
+              Upload PDF
+            </Button>
+          </Stack>
           <input
             ref={inputRef}
             type="file"
@@ -298,8 +352,8 @@ export function PreviewPane() {
               e.target.value = '';
             }}
           />
-        </Stack>
-      </Center>
+        </Box>
+      </Box>
     );
   }
 
