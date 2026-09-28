@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useWatermarkStore } from '../state/store';
 import { computeWatermarkLayout } from '../core/layout';
+import { resolvedFontSize } from '../core/watermarkConfig';
 import { measureFontMetrics } from '../core/canvasMetrics';
 import { cssFamilyName, loadFontFace } from '../core/fonts';
 
 interface WatermarkOverlayProps {
-  /** Page's visual (post-rotation) size in PDF points — same box the exporter tiles against. */
+  /** Page's visual (post-rotation) size in PDF points; the same box the exporter tiles against. */
   visualWidth: number;
   visualHeight: number;
   /** On-screen size in CSS pixels, matching the base page canvas. */
@@ -15,7 +16,7 @@ interface WatermarkOverlayProps {
 
 /**
  * Absolutely-positioned canvas drawn on top of the rendered page, using the
- * exact same layout.ts output the exporter uses — this is what keeps
+ * exact same layout.ts output the exporter uses, which is what keeps
  * preview and export visually identical (spec §11).
  */
 export function WatermarkOverlay({ visualWidth, visualHeight, cssWidth, cssHeight }: WatermarkOverlayProps) {
@@ -53,6 +54,7 @@ export function WatermarkOverlay({ visualWidth, visualHeight, cssWidth, cssHeigh
         columns: config.columns,
         rows: config.rows,
         gapRatio: config.gapRatio,
+        fontSize: resolvedFontSize(config),
         metrics,
       });
 

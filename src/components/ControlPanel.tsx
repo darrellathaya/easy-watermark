@@ -6,6 +6,7 @@ import {
   Divider,
   Group,
   ScrollArea,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -16,7 +17,7 @@ import { IconAlertCircle, IconCheck, IconDownload } from '@tabler/icons-react';
 import { useWatermarkStore } from '../state/store';
 import { SliderNumber } from './SliderNumber';
 import { FONTS, cssFamilyName } from '../core/fonts';
-import { ANGLE_PRESETS, CONFIG_LIMITS } from '../core/watermarkConfig';
+import { ANGLE_PRESETS, CONFIG_LIMITS, type FontSizeMode } from '../core/watermarkConfig';
 import { applyWatermark, downloadBytes, EncryptedPdfError } from '../core/watermarkPdf';
 import { expandFilenamePattern } from '../core/filename';
 
@@ -87,6 +88,36 @@ export function ControlPanel() {
                 <span style={{ fontFamily: `"${cssFamilyName(option.value)}", sans-serif` }}>{option.label}</span>
               )}
             />
+
+            <Stack gap={6}>
+              <Group justify="space-between" wrap="nowrap">
+                <Text size="sm" fw={500}>
+                  Font size
+                </Text>
+                <SegmentedControl
+                  size="xs"
+                  value={config.fontSizeMode}
+                  onChange={(v) => setConfig({ fontSizeMode: v as FontSizeMode })}
+                  data={[
+                    { value: 'auto', label: 'Auto' },
+                    { value: 'fixed', label: 'Fixed' },
+                  ]}
+                />
+              </Group>
+              {config.fontSizeMode === 'fixed' ? (
+                <SliderNumber
+                  label="Size"
+                  value={config.fontSize}
+                  onChange={(v) => setConfig({ fontSize: v })}
+                  suffix=" pt"
+                  {...CONFIG_LIMITS.fontSize}
+                />
+              ) : (
+                <Text size="xs" c="dimmed">
+                  Fitted to each tile; set the width with Columns and Gap below.
+                </Text>
+              )}
+            </Stack>
           </Stack>
         </div>
 
@@ -128,13 +159,21 @@ export function ControlPanel() {
                 </Button>
               ))}
             </Group>
-            <SliderNumber
-              label="Gap"
-              value={config.gapRatio}
-              onChange={(v) => setConfig({ gapRatio: v })}
-              decimalScale={2}
-              {...CONFIG_LIMITS.gapRatio}
-            />
+            <Stack gap={4}>
+              <SliderNumber
+                label="Gap"
+                value={config.gapRatio}
+                onChange={(v) => setConfig({ gapRatio: v })}
+                decimalScale={2}
+                disabled={config.fontSizeMode === 'fixed'}
+                {...CONFIG_LIMITS.gapRatio}
+              />
+              {config.fontSizeMode === 'fixed' && (
+                <Text size="xs" c="dimmed">
+                  Gap only applies to an auto-fitted font size.
+                </Text>
+              )}
+            </Stack>
           </Stack>
         </div>
 
@@ -186,7 +225,7 @@ export function ControlPanel() {
               >
                 <Text size="xs">
                   {r.name}
-                  {r.message ? ` — ${r.message}` : ' — done'}
+                  {r.message ? `: ${r.message}` : ': done'}
                 </Text>
               </Alert>
             ))}

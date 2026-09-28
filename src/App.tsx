@@ -8,7 +8,7 @@ export default function App() {
   useEffect(() => {
     FONTS.forEach((f) => {
       loadFontFace(f.id).catch(() => {
-        // Ignore — the select falls back to its default font for this option.
+        // Ignore: the select falls back to its default font for this option.
       });
     });
   }, []);

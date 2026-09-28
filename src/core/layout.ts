@@ -28,6 +28,14 @@ export interface LayoutInput {
   rows: number;
   /** Fraction (0-0.6) of each tile left as empty breathing room. */
   gapRatio: number;
+  /**
+   * Explicit font size in PDF points. Omitted (or <= 0) means auto: the size
+   * is fitted to the tile width, which is the historic behavior and what
+   * makes `columns` read as "watermark width". A given size is still clamped
+   * to FONT_SIZE_RANGE, and it makes `gapRatio` inert, since nothing is being
+   * fitted for the gap to leave room in.
+   */
+  fontSize?: number;
   metrics: FontMetrics;
 }
 
@@ -44,8 +52,11 @@ export interface LayoutResult {
   angleRad: number;
 }
 
-const MIN_FONT_SIZE = 4;
-const MAX_FONT_SIZE = 400;
+/** Hard bounds on the rendered font size, auto-fitted or explicit. */
+export const FONT_SIZE_RANGE = { min: 4, max: 400 } as const;
+
+const MIN_FONT_SIZE = FONT_SIZE_RANGE.min;
+const MAX_FONT_SIZE = FONT_SIZE_RANGE.max;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -57,7 +68,7 @@ function clamp(value: number, min: number, max: number): number {
  * page (origin bottom-left, y up). See spec §3.1 for the derivation.
  */
 export function computeWatermarkLayout(input: LayoutInput): LayoutResult {
-  const { pageWidth: W, pageHeight: H, angleDeg, columns, rows, gapRatio, metrics } = input;
+  const { pageWidth: W, pageHeight: H, angleDeg, columns, rows, gapRatio, fontSize: explicitFontSize, metrics } = input;
 
   const angleRad = (angleDeg * Math.PI) / 180;
   const cos = Math.cos(angleRad);
@@ -75,7 +86,8 @@ export function computeWatermarkLayout(input: LayoutInput): LayoutResult {
   // widthAtSize is linear in size, so unitWidth (width at size 1) is enough
   // to solve for the font size that fills the tile width minus the gap.
   const unitW = metrics.unitWidth;
-  const rawFontSize = unitW > 0 ? (tileW * (1 - gapRatio)) / unitW : MAX_FONT_SIZE;
+  const autoFontSize = unitW > 0 ? (tileW * (1 - gapRatio)) / unitW : MAX_FONT_SIZE;
+  const rawFontSize = explicitFontSize && explicitFontSize > 0 ? explicitFontSize : autoFontSize;
   const fontSize = clamp(rawFontSize, MIN_FONT_SIZE, MAX_FONT_SIZE);
 
   const tw = unitW * fontSize;

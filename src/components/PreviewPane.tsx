@@ -104,8 +104,8 @@ export function PreviewPane() {
     };
   }, [fileId, fileStatus, fileBytes, fileName]);
 
-  // Measure every page up front so the placeholders — and therefore the
-  // scroll height — are right from the first frame, even in documents that
+  // Measure every page up front so the placeholders (and therefore the
+  // scroll height) are right from the first frame, even in documents that
   // mix page sizes and orientations. Batched, because a page-at-a-time
   // setState would re-render the whole column once per page.
   useEffect(() => {

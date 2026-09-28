@@ -18,7 +18,7 @@ function persistConfig(config: WatermarkConfig): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch {
-    // localStorage unavailable (private mode, quota, etc.) — silently skip persistence.
+    // localStorage unavailable (private mode, quota, etc.): silently skip persistence.
   }
 }
 

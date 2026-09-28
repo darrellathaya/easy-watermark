@@ -39,9 +39,9 @@ export function isRenderingCancelledException(err: unknown): boolean {
  * Starts rendering one page onto `canvas` at a device-pixel-ratio-correct
  * scale for the given CSS width. Returns the underlying pdf.js RenderTask
  * (so a caller can `.cancel()` it if superseded by a newer render on the
- * same canvas — pdf.js throws if two renders overlap on one canvas) plus a
+ * same canvas: pdf.js throws if two renders overlap on one canvas) plus a
  * `result` promise resolving to the page's *visual* (post-rotation) size in
- * PDF points — the same box the exporter tiles against.
+ * PDF points: the same box the exporter tiles against.
  */
 export function renderPageToCanvas(
   page: PDFPageProxy,

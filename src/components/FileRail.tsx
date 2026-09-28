@@ -129,7 +129,7 @@ function FileRow({
         </Text>
         <Text size="xs" c="dimmed" truncate>
           {isEncrypted
-            ? 'Password-protected — skipped'
+            ? 'Password-protected, skipped'
             : isError
               ? (entry.errorMessage ?? 'Failed to load')
               : `${formatSize(entry.size)} · ${entry.pageCount ?? '…'} pages`}

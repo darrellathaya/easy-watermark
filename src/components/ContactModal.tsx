@@ -10,7 +10,7 @@ interface ContactModalProps {
 
 /**
  * Author contact panel (top icon + bottom bar both open this). Sending
- * builds a `mailto:` link and hands off to the visitor's own email client —
+ * builds a `mailto:` link and hands off to the visitor's own email client,
  * consistent with the app's "nothing leaves the browser except what the
  * user explicitly sends" stance: no form submission ever reaches a server.
  */
@@ -44,7 +44,7 @@ export function ContactModal({ opened, onClose }: ContactModalProps) {
         <Stack gap="xs" style={{ flex: 1, minWidth: 200 }}>
           <Text size="sm" c="dimmed">
             Built and maintained by {CONTACT.name}. Bugs, feature ideas, or anything else about
-            Easy Watermark are welcome — this is the fastest way to reach me.
+            Easy Watermark are welcome; this is the fastest way to reach me.
           </Text>
           <Anchor href={`mailto:${CONTACT.email}`} size="sm">
             {CONTACT.email}
@@ -98,7 +98,7 @@ export function ContactModal({ opened, onClose }: ContactModalProps) {
             Send message
           </Button>
           <Text size="xs" c="dimmed">
-            Opens your email client with this filled in — nothing is sent from here directly.
+            Opens your email client with this filled in; nothing is sent from here directly.
           </Text>
         </Stack>
       </Group>

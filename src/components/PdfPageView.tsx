@@ -49,7 +49,7 @@ export function PdfPageView({
 }: PdfPageViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Tracks the in-flight pdf.js RenderTask so a superseding render (from a
-  // resize, or from scrolling back into view) can cancel it first — pdf.js
+  // resize, or from scrolling back into view) can cancel it first: pdf.js
   // throws if two render() calls overlap on the same canvas, which would
   // otherwise leave this page blank.
   const renderTaskRef = useRef<RenderTask | null>(null);

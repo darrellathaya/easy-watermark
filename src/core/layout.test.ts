@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeCoverBox, computeWatermarkLayout, type FontMetrics } from './layout';
 
 // A degenerate metric (zero width/height) collapses the baseline-anchor
-// offset to zero, so the returned tile point equals the raw tile *center* —
+// offset to zero, so the returned tile point equals the raw tile *center*,
 // useful for asserting on tile geometry independent of text metrics.
 const ZERO_METRICS: FontMetrics = { unitWidth: 0, capHeight: 0 };
 
@@ -107,6 +107,40 @@ describe('computeWatermarkLayout', () => {
     const layout90 = computeWatermarkLayout({ pageWidth: W, pageHeight: H, text: 'X', angleDeg: 90, columns: 4, rows: 8, gapRatio: 0.25, metrics: TEXT_METRICS });
 
     expect(layout90.tiles).toHaveLength(layout0.tiles.length);
+  });
+
+  it('uses an explicit fontSize verbatim, ignoring columns, rows and gap', () => {
+    const base = { pageWidth: 612, pageHeight: 792, text: 'CONFIDENTIAL', angleDeg: -45, metrics: TEXT_METRICS, fontSize: 37 };
+
+    expect(computeWatermarkLayout({ ...base, columns: 4, rows: 8, gapRatio: 0.25 }).fontSize).toBe(37);
+    expect(computeWatermarkLayout({ ...base, columns: 12, rows: 40, gapRatio: 0 }).fontSize).toBe(37);
+    expect(computeWatermarkLayout({ ...base, columns: 1, rows: 1, gapRatio: 0.6 }).fontSize).toBe(37);
+  });
+
+  it('falls back to the auto fit when fontSize is omitted or non-positive', () => {
+    const base = { pageWidth: 612, pageHeight: 792, text: 'CONFIDENTIAL', angleDeg: -45, columns: 4, rows: 8, gapRatio: 0.25, metrics: TEXT_METRICS };
+
+    const auto = computeWatermarkLayout(base);
+    expect(computeWatermarkLayout({ ...base, fontSize: 0 }).fontSize).toBeCloseTo(auto.fontSize, 6);
+    expect(computeWatermarkLayout({ ...base, fontSize: -10 }).fontSize).toBeCloseTo(auto.fontSize, 6);
+    expect(auto.fontSize).not.toBe(37);
+  });
+
+  it('leaves tile positions untouched when only fontSize changes', () => {
+    const base = { pageWidth: 612, pageHeight: 792, text: 'X', angleDeg: -45, columns: 3, rows: 4, gapRatio: 0.25, metrics: ZERO_METRICS };
+
+    const small = computeWatermarkLayout({ ...base, fontSize: 10 });
+    const large = computeWatermarkLayout({ ...base, fontSize: 200 });
+
+    // ZERO_METRICS collapses the baseline offset, so these are raw tile centers.
+    expect(small.tiles).toEqual(large.tiles);
+  });
+
+  it('clamps an explicit fontSize into [4, 400] too', () => {
+    const base = { pageWidth: 612, pageHeight: 792, text: 'X', angleDeg: 0, columns: 4, rows: 8, gapRatio: 0.25, metrics: TEXT_METRICS };
+
+    expect(computeWatermarkLayout({ ...base, fontSize: 1 }).fontSize).toBe(4);
+    expect(computeWatermarkLayout({ ...base, fontSize: 10000 }).fontSize).toBe(400);
   });
 
   it('clamps fontSize into [4, 400]', () => {
