@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react';
 import { ActionIcon, Box, Button, Checkbox, Group, ScrollArea, Stack, Text, rem } from '@mantine/core';
-import { IconFileTypePdf, IconLock, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconFileTypePdf, IconLock, IconPhoto, IconTrash, IconUpload } from '@tabler/icons-react';
 import { useWatermarkStore, type FileEntry } from '../state/store';
 import { useFileIngest } from '../state/useFileIngest';
+
+/** Picker filter, kept in step with what useFileIngest actually accepts. */
+const FILE_ACCEPT = 'application/pdf,.pdf,image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -29,7 +32,7 @@ export function FileRail() {
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={FILE_ACCEPT}
         multiple
         hidden
         onChange={(e) => {
@@ -59,7 +62,7 @@ export function FileRail() {
         }}
       >
         <Text size="xs" c="dimmed">
-          Drop PDFs here
+          Drop files here
         </Text>
       </Box>
 
@@ -122,7 +125,13 @@ function FileRow({
         onChange={onToggle}
         onClick={(e) => e.stopPropagation()}
       />
-      {isEncrypted ? <IconLock size={18} color="var(--mantine-color-red-5)" /> : <IconFileTypePdf size={18} />}
+      {isEncrypted ? (
+        <IconLock size={18} color="var(--mantine-color-red-5)" />
+      ) : entry.kind === 'image' ? (
+        <IconPhoto size={18} />
+      ) : (
+        <IconFileTypePdf size={18} />
+      )}
       <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
         <Text size="xs" fw={500} truncate>
           {entry.name}
@@ -132,7 +141,9 @@ function FileRow({
             ? 'Password-protected, skipped'
             : isError
               ? (entry.errorMessage ?? 'Failed to load')
-              : `${formatSize(entry.size)} · ${entry.pageCount ?? '…'} pages`}
+              : entry.kind === 'image'
+                ? `${formatSize(entry.size)} · ${entry.imageSize ? `${entry.imageSize.width}×${entry.imageSize.height}` : 'image'}`
+                : `${formatSize(entry.size)} · ${entry.pageCount ?? '…'} pages`}
         </Text>
       </Stack>
       <ActionIcon variant="subtle" color="gray" size="sm" onClick={(e) => { e.stopPropagation(); onRemove(); }}>

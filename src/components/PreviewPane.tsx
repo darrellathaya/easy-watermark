@@ -4,10 +4,13 @@ import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconFileUpload } 
 import { useWatermarkStore } from '../state/store';
 import { useFileIngest } from '../state/useFileIngest';
 import { getOrLoadDocument } from '../core/docCache';
-import type { PDFDocumentProxy } from '../core/pdfjs';
-import { PdfPageView } from './PdfPageView';
+import { getOrDecodeImage } from '../core/imageCache';
+import { imagePreviewSource, pdfPreviewSource, type PreviewSource } from '../core/previewSource';
+import { PreviewPageView } from './PreviewPageView';
 
 const RENDER_DEBOUNCE_MS = 120;
+/** Picker filter, kept in step with what useFileIngest actually accepts. */
+const FILE_ACCEPT = 'application/pdf,.pdf,image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
 /** Vertical gap between pages, also the scroll-to-page top inset. */
 const PAGE_GAP_PX = 16;
 /** Safety net: stop honouring a scroll-to-page target if it is never reached. */
@@ -18,9 +21,9 @@ interface PageSize {
   visualHeight: number;
 }
 
-interface LoadedDoc {
+interface LoadedSource {
   fileId: string;
-  doc: PDFDocumentProxy;
+  source: PreviewSource;
 }
 
 export function PreviewPane() {
@@ -36,7 +39,7 @@ export function PreviewPane() {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  const [loaded, setLoaded] = useState<LoadedDoc | null>(null);
+  const [loaded, setLoaded] = useState<LoadedSource | null>(null);
   const [pageSizes, setPageSizes] = useState<Record<number, PageSize>>({});
   const [pageNumberByFile, setPageNumberByFile] = useState<Record<string, number>>({});
   const [containerWidth, setContainerWidth] = useState(0);
@@ -57,6 +60,8 @@ export function PreviewPane() {
   const fileStatus = selected?.status ?? null;
   const fileName = selected?.name;
   const fileBytes = selected?.bytes;
+  const fileKind = selected?.kind ?? null;
+  const fileMimeType = selected?.mimeType ?? null;
 
   // Declared first so these mirrors are current before any effect below runs.
   useEffect(() => {
@@ -64,8 +69,8 @@ export function PreviewPane() {
     pageNumberByFileRef.current = pageNumberByFile;
   }, [fileId, pageNumberByFile]);
 
-  const doc = loaded && loaded.fileId === fileId ? loaded.doc : null;
-  const pageCount = doc?.numPages ?? selected?.pageCount ?? 1;
+  const source = loaded && loaded.fileId === fileId ? loaded.source : null;
+  const pageCount = source?.pageCount ?? selected?.pageCount ?? 1;
   const pageNumber = Math.min(fileId ? (pageNumberByFile[fileId] ?? 1) : 1, pageCount);
   const cssWidth = Math.max(Math.min(containerWidth - 32, 900), 0);
 
@@ -85,15 +90,21 @@ export function PreviewPane() {
     };
   }, [containerEl]);
 
-  // Load (or reuse) the pdf.js document for the selected file.
+  // Load (or reuse) the preview source for the selected file: a pdf.js
+  // document, or a decoded image standing in as a single-page document.
   useEffect(() => {
     setRenderError(null);
-    if (!fileId || fileStatus !== 'ready' || !fileBytes) return;
+    if (!fileId || fileStatus !== 'ready' || !fileBytes || !fileKind) return;
 
     let cancelled = false;
-    getOrLoadDocument(fileId, fileBytes, fileName)
-      .then((d) => {
-        if (!cancelled) setLoaded({ fileId, doc: d });
+    const loading =
+      fileKind === 'image'
+        ? getOrDecodeImage(fileId, fileBytes, fileMimeType ?? 'image/png', fileName).then(imagePreviewSource)
+        : getOrLoadDocument(fileId, fileBytes, fileName).then(pdfPreviewSource);
+
+    loading
+      .then((next) => {
+        if (!cancelled) setLoaded({ fileId, source: next });
       })
       .catch((err) => {
         if (!cancelled) setRenderError(err instanceof Error ? err.message : String(err));
@@ -102,14 +113,14 @@ export function PreviewPane() {
     return () => {
       cancelled = true;
     };
-  }, [fileId, fileStatus, fileBytes, fileName]);
+  }, [fileId, fileStatus, fileBytes, fileName, fileKind, fileMimeType]);
 
   // Measure every page up front so the placeholders (and therefore the
   // scroll height) are right from the first frame, even in documents that
   // mix page sizes and orientations. Batched, because a page-at-a-time
   // setState would re-render the whole column once per page.
   useEffect(() => {
-    if (!doc) return;
+    if (!source) return;
     let cancelled = false;
     setPageSizes({});
 
@@ -122,12 +133,10 @@ export function PreviewPane() {
         setPageSizes((prev) => ({ ...prev, ...pending }));
       };
 
-      for (let n = 1; n <= doc.numPages; n++) {
+      for (let n = 1; n <= source.pageCount; n++) {
         if (cancelled) return;
         try {
-          const page = await doc.getPage(n);
-          const viewport = page.getViewport({ scale: 1 });
-          batch[n] = { visualWidth: viewport.width, visualHeight: viewport.height };
+          batch[n] = await source.getPageSize(n);
         } catch {
           // A single unreadable page shouldn't stop the rest from sizing;
           // it falls back to the first page's aspect ratio below.
@@ -140,7 +149,7 @@ export function PreviewPane() {
     return () => {
       cancelled = true;
     };
-  }, [doc]);
+  }, [source]);
 
   const registerPageEl = useCallback((page: number, el: HTMLDivElement | null) => {
     if (el) pageEls.current.set(page, el);
@@ -214,7 +223,7 @@ export function PreviewPane() {
     return () => observer.disconnect();
     // Re-observe whenever the page list identity changes (new document, or
     // pages mounting for the first time).
-  }, [containerEl, doc, pageCount, setCurrentPage, clearScrollTarget]);
+  }, [containerEl, source, pageCount, setCurrentPage, clearScrollTarget]);
 
   // A scroll the user drives themselves wins over a pending jump target.
   useEffect(() => {
@@ -263,12 +272,12 @@ export function PreviewPane() {
   // always mounts at scroll top). This runs after the page wrappers have
   // registered themselves and before the centre observer's first callback,
   // so the restored page isn't immediately overwritten with page 1.
-  const restoredForRef = useRef<PDFDocumentProxy | null>(null);
+  const restoredForRef = useRef<PreviewSource | null>(null);
   useEffect(() => {
-    if (!doc || !containerEl || cssWidth <= 0 || restoredForRef.current === doc) return;
-    restoredForRef.current = doc;
+    if (!source || !containerEl || cssWidth <= 0 || restoredForRef.current === source) return;
+    restoredForRef.current = source;
     goToPage(pageNumberByFileRef.current[selectedIdRef.current ?? ''] ?? 1, 'auto');
-  }, [doc, containerEl, cssWidth, goToPage]);
+  }, [source, containerEl, cssWidth, goToPage]);
 
   useEffect(() => () => clearTimeout(scrollTimeoutRef.current), []);
 
@@ -327,7 +336,10 @@ export function PreviewPane() {
           <Stack align="center" gap="sm">
             <IconFileUpload size={64} stroke={1} opacity={dragOver ? 0.9 : 0.5} />
             <Text c={dragOver ? undefined : 'dimmed'}>
-              {dragOver ? 'Drop to add your PDFs' : 'Drop in a PDF to get started'}
+              {dragOver ? 'Drop to add your files' : 'Drop in a file to get started'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              PDF, PNG, JPEG or WebP
             </Text>
             {/* Stays a real button so the picker is still keyboard-reachable;
                 stopPropagation keeps the pane's own click from firing too. */}
@@ -338,13 +350,13 @@ export function PreviewPane() {
                 inputRef.current?.click();
               }}
             >
-              Upload PDF
+              Upload files
             </Button>
           </Stack>
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf,.pdf"
+            accept={FILE_ACCEPT}
             multiple
             hidden
             onChange={(e) => {
@@ -409,7 +421,7 @@ export function PreviewPane() {
               {renderError}
             </Alert>
           </Center>
-        ) : !doc || cssWidth <= 0 ? (
+        ) : !source || cssWidth <= 0 ? (
           <Center h="100%">
             <Loader size="sm" />
           </Center>
@@ -428,9 +440,9 @@ export function PreviewPane() {
               const size = pageSizes[page];
               const aspect = size && size.visualWidth > 0 ? size.visualHeight / size.visualWidth : fallbackAspect;
               return (
-                <PdfPageView
+                <PreviewPageView
                   key={page}
-                  doc={doc}
+                  source={source}
                   pageNumber={page}
                   cssWidth={cssWidth}
                   placeholderHeight={cssWidth * aspect}

@@ -123,8 +123,8 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
 }
 
 /** Triggers a browser download of the given bytes via an object URL, then revokes it. */
-export function downloadBytes(bytes: Uint8Array, fileName: string): void {
-  const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/pdf' });
+export function downloadBytes(bytes: Uint8Array, fileName: string, mimeType = 'application/pdf'): void {
+  const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

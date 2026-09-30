@@ -24,12 +24,21 @@ function persistConfig(config: WatermarkConfig): void {
 
 export type FileStatus = 'loading' | 'ready' | 'encrypted' | 'error';
 
+/** What kind of subject a file holds, which decides the render/export path. */
+export type FileKind = 'pdf' | 'image';
+
 export interface FileEntry {
   id: string;
   file: File;
   name: string;
   size: number;
+  kind: FileKind;
+  /** Resolved MIME type; `File.type` can be empty for a dragged file. */
+  mimeType: string;
+  /** Always 1 for an image. */
   pageCount: number | null;
+  /** Pixel dimensions, once an image has been decoded. */
+  imageSize?: { width: number; height: number };
   status: FileStatus;
   errorMessage?: string;
   checked: boolean;
@@ -46,7 +55,11 @@ interface WatermarkStore {
   removeFile: (id: string) => void;
   selectFile: (id: string) => void;
   toggleChecked: (id: string) => void;
-  setFileStatus: (id: string, status: FileStatus, extra?: { pageCount?: number; errorMessage?: string }) => void;
+  setFileStatus: (
+    id: string,
+    status: FileStatus,
+    extra?: { pageCount?: number; errorMessage?: string; imageSize?: { width: number; height: number } },
+  ) => void;
   setConfig: (patch: Partial<WatermarkConfig>) => void;
   resetConfig: () => void;
 }
@@ -84,7 +97,13 @@ export const useWatermarkStore = create<WatermarkStore>((set, get) => ({
     set((state) => ({
       files: state.files.map((f) =>
         f.id === id
-          ? { ...f, status, pageCount: extra?.pageCount ?? f.pageCount, errorMessage: extra?.errorMessage ?? f.errorMessage }
+          ? {
+              ...f,
+              status,
+              pageCount: extra?.pageCount ?? f.pageCount,
+              imageSize: extra?.imageSize ?? f.imageSize,
+              errorMessage: extra?.errorMessage ?? f.errorMessage,
+            }
           : f,
       ),
     })),
