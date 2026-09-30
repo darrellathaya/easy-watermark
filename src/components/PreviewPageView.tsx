@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box } from '@mantine/core';
-import { isRenderingCancelledException, renderPageToCanvas, type PDFDocumentProxy, type RenderTask } from '../core/pdfjs';
+import { isRenderingCancelledException } from '../core/pdfjs';
+import { isPreviewRenderCancelled, type PreviewRenderHandle, type PreviewSource } from '../core/previewSource';
 import { WatermarkOverlay } from './WatermarkOverlay';
 
 /**
@@ -19,8 +20,8 @@ interface RenderedDims {
   cssHeight: number;
 }
 
-interface PdfPageViewProps {
-  doc: PDFDocumentProxy;
+interface PreviewPageViewProps {
+  source: PreviewSource;
   pageNumber: number;
   /** On-screen width in CSS pixels; shared by every page so the column stays flush. */
   cssWidth: number;
@@ -34,11 +35,11 @@ interface PdfPageViewProps {
 }
 
 /**
- * One page of the continuous-scroll preview: the pdf.js page canvas plus the
- * watermark overlay, rendered only while the page is near the viewport.
+ * One page of the continuous-scroll preview: the rendered subject (a PDF page
+ * or an image) plus the watermark overlay, drawn only while near the viewport.
  */
-export function PdfPageView({
-  doc,
+export function PreviewPageView({
+  source,
   pageNumber,
   cssWidth,
   placeholderHeight,
@@ -46,13 +47,13 @@ export function PdfPageView({
   onMeasured,
   onElement,
   onRenderError,
-}: PdfPageViewProps) {
+}: PreviewPageViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Tracks the in-flight pdf.js RenderTask so a superseding render (from a
-  // resize, or from scrolling back into view) can cancel it first — pdf.js
-  // throws if two render() calls overlap on the same canvas, which would
-  // otherwise leave this page blank.
-  const renderTaskRef = useRef<RenderTask | null>(null);
+  // Tracks the in-flight render so a superseding one (from a resize, or from
+  // scrolling back into view) can cancel it first: pdf.js throws if two
+  // render() calls overlap on the same canvas, which would otherwise leave
+  // this page blank.
+  const renderHandleRef = useRef<PreviewRenderHandle | null>(null);
   const [wrapperEl, setWrapperEl] = useState<HTMLDivElement | null>(null);
   const [isNear, setIsNear] = useState(false);
   const [rendered, setRendered] = useState<RenderedDims | null>(null);
@@ -81,8 +82,8 @@ export function PdfPageView({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    renderTaskRef.current?.cancel();
-    renderTaskRef.current = null;
+    renderHandleRef.current?.cancel();
+    renderHandleRef.current = null;
 
     if (!isNear || cssWidth <= 0) {
       // Release the backing store of an off-screen page; a zero-sized canvas
@@ -96,17 +97,12 @@ export function PdfPageView({
     }
 
     let cancelled = false;
+    const { handle, result } = source.render(pageNumber, canvas, cssWidth);
+    renderHandleRef.current = handle;
 
-    doc
-      .getPage(pageNumber)
-      .then((page) => {
-        if (cancelled || !canvasRef.current) return null;
-        const { task, result } = renderPageToCanvas(page, canvasRef.current, cssWidth);
-        renderTaskRef.current = task;
-        return result;
-      })
+    result
       .then((dims) => {
-        if (cancelled || !dims) return;
+        if (cancelled) return;
         setRendered({
           visualWidth: dims.visualWidth,
           visualHeight: dims.visualHeight,
@@ -116,17 +112,17 @@ export function PdfPageView({
         onMeasured(pageNumber, { visualWidth: dims.visualWidth, visualHeight: dims.visualHeight });
       })
       .catch((err) => {
-        if (cancelled || isRenderingCancelledException(err)) return;
+        if (cancelled || isPreviewRenderCancelled(err) || isRenderingCancelledException(err)) return;
         onRenderError(err instanceof Error ? err.message : String(err));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [doc, pageNumber, cssWidth, isNear, onMeasured, onRenderError]);
+  }, [source, pageNumber, cssWidth, isNear, onMeasured, onRenderError]);
 
   // Cancel any in-flight render when this page leaves the list.
-  useEffect(() => () => renderTaskRef.current?.cancel(), []);
+  useEffect(() => () => renderHandleRef.current?.cancel(), []);
 
   const height = rendered?.cssHeight ?? placeholderHeight;
 

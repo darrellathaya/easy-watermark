@@ -6,6 +6,7 @@ import {
   Divider,
   Group,
   ScrollArea,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -16,8 +17,9 @@ import { IconAlertCircle, IconCheck, IconDownload } from '@tabler/icons-react';
 import { useWatermarkStore } from '../state/store';
 import { SliderNumber } from './SliderNumber';
 import { FONTS, cssFamilyName } from '../core/fonts';
-import { ANGLE_PRESETS, CONFIG_LIMITS } from '../core/watermarkConfig';
+import { ANGLE_PRESETS, CONFIG_LIMITS, type FontSizeMode } from '../core/watermarkConfig';
 import { applyWatermark, downloadBytes, EncryptedPdfError } from '../core/watermarkPdf';
+import { applyImageWatermark, ImageDecodeError } from '../core/imageWatermark';
 import { expandFilenamePattern } from '../core/filename';
 
 const SWATCHES = ['#B9B9C2', '#FF6B6B', '#FFD43B', '#69DB7C', '#4DABF7', '#DA77F2', '#212529', '#FFFFFF'];
@@ -47,12 +49,18 @@ export function ControlPanel() {
 
     for (const file of checkedFiles) {
       try {
-        const bytes = await applyWatermark(file.bytes, config, file.name);
-        const outName = expandFilenamePattern(pattern, file.name);
-        downloadBytes(bytes, outName);
+        // An image exports as a PNG at its native resolution; a PDF keeps its
+        // own page geometry. Both tile through layout.ts, so they match.
+        if (file.kind === 'image') {
+          const bytes = await applyImageWatermark(file.bytes, file.mimeType, config, file.name);
+          downloadBytes(bytes, expandFilenamePattern(pattern, file.name, 'png'), 'image/png');
+        } else {
+          const bytes = await applyWatermark(file.bytes, config, file.name);
+          downloadBytes(bytes, expandFilenamePattern(pattern, file.name, 'pdf'));
+        }
         nextResults.push({ name: file.name, status: 'ok' });
       } catch (err) {
-        if (err instanceof EncryptedPdfError) {
+        if (err instanceof EncryptedPdfError || err instanceof ImageDecodeError) {
           nextResults.push({ name: file.name, status: 'skipped', message: err.message });
         } else {
           nextResults.push({ name: file.name, status: 'error', message: err instanceof Error ? err.message : String(err) });
@@ -87,6 +95,36 @@ export function ControlPanel() {
                 <span style={{ fontFamily: `"${cssFamilyName(option.value)}", sans-serif` }}>{option.label}</span>
               )}
             />
+
+            <Stack gap={6}>
+              <Group justify="space-between" wrap="nowrap">
+                <Text size="sm" fw={500}>
+                  Font size
+                </Text>
+                <SegmentedControl
+                  size="xs"
+                  value={config.fontSizeMode}
+                  onChange={(v) => setConfig({ fontSizeMode: v as FontSizeMode })}
+                  data={[
+                    { value: 'auto', label: 'Auto' },
+                    { value: 'fixed', label: 'Fixed' },
+                  ]}
+                />
+              </Group>
+              {config.fontSizeMode === 'fixed' ? (
+                <SliderNumber
+                  label="Size"
+                  value={config.fontSize}
+                  onChange={(v) => setConfig({ fontSize: v })}
+                  suffix=" pt"
+                  {...CONFIG_LIMITS.fontSize}
+                />
+              ) : (
+                <Text size="xs" c="dimmed">
+                  Fitted to each tile; set the width with Columns and Gap below.
+                </Text>
+              )}
+            </Stack>
           </Stack>
         </div>
 
@@ -128,13 +166,21 @@ export function ControlPanel() {
                 </Button>
               ))}
             </Group>
-            <SliderNumber
-              label="Gap"
-              value={config.gapRatio}
-              onChange={(v) => setConfig({ gapRatio: v })}
-              decimalScale={2}
-              {...CONFIG_LIMITS.gapRatio}
-            />
+            <Stack gap={4}>
+              <SliderNumber
+                label="Gap"
+                value={config.gapRatio}
+                onChange={(v) => setConfig({ gapRatio: v })}
+                decimalScale={2}
+                disabled={config.fontSizeMode === 'fixed'}
+                {...CONFIG_LIMITS.gapRatio}
+              />
+              {config.fontSizeMode === 'fixed' && (
+                <Text size="xs" c="dimmed">
+                  Gap only applies to an auto-fitted font size.
+                </Text>
+              )}
+            </Stack>
           </Stack>
         </div>
 
@@ -165,7 +211,7 @@ export function ControlPanel() {
           <Stack gap="sm">
             <TextInput
               label="Filename pattern"
-              description="Tokens: {name}, {date}"
+              description="Tokens: {name}, {date}. PDFs export as .pdf, images as .png"
               value={pattern}
               onChange={(e) => setPattern(e.currentTarget.value)}
             />
@@ -186,7 +232,7 @@ export function ControlPanel() {
               >
                 <Text size="xs">
                   {r.name}
-                  {r.message ? ` — ${r.message}` : ' — done'}
+                  {r.message ? `: ${r.message}` : ': done'}
                 </Text>
               </Alert>
             ))}

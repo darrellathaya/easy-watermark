@@ -10,17 +10,18 @@ interface SliderNumberProps {
   decimalScale?: number;
   suffix?: string;
   marks?: { value: number; label?: string }[];
+  disabled?: boolean;
 }
 
 /**
- * A Slider and a NumberInput bound to the same state value — never two
+ * A Slider and a NumberInput bound to the same state value, never two
  * separate fields (spec §11). Either control can drive the other.
  */
-export function SliderNumber({ label, value, onChange, min, max, step, decimalScale = 0, suffix = '', marks }: SliderNumberProps) {
+export function SliderNumber({ label, value, onChange, min, max, step, decimalScale = 0, suffix = '', marks, disabled = false }: SliderNumberProps) {
   return (
     <Stack gap={4}>
       <Group justify="space-between" wrap="nowrap">
-        <Text size="sm" fw={500}>
+        <Text size="sm" fw={500} c={disabled ? 'dimmed' : undefined}>
           {label}
         </Text>
         <NumberInput
@@ -36,6 +37,7 @@ export function SliderNumber({ label, value, onChange, min, max, step, decimalSc
           suffix={suffix}
           w={90}
           size="xs"
+          disabled={disabled}
         />
       </Group>
       <Slider
@@ -46,6 +48,7 @@ export function SliderNumber({ label, value, onChange, min, max, step, decimalSc
         step={step}
         marks={marks}
         label={(v) => `${v}${suffix}`}
+        disabled={disabled}
       />
     </Stack>
   );

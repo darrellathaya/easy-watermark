@@ -37,7 +37,7 @@ export function loadFontBytes(id: string): Promise<ArrayBuffer> {
     if (!res.ok) throw new Error(`Failed to load font "${def.label}" from ${def.url}`);
     return res.arrayBuffer();
   });
-  // Don't cache a rejected fetch — allow retry on the next call.
+  // Don't cache a rejected fetch; allow retry on the next call.
   promise.catch(() => bytesCache.delete(id));
   bytesCache.set(id, promise);
   return promise;

@@ -4,7 +4,7 @@ import { PDFDocument, EncryptedPDFError as PdfLibEncryptedPDFError, degrees, rgb
 import fontkit from '@pdf-lib/fontkit';
 import { computeWatermarkLayout, type FontMetrics } from './layout';
 import { loadFontBytes, getFontDef } from './fonts';
-import type { WatermarkConfig } from './watermarkConfig';
+import { resolvedFontSize, type WatermarkConfig } from './watermarkConfig';
 
 /** Thrown when a PDF is password/encryption-protected; the UI surfaces this and skips the file. */
 export class EncryptedPdfError extends Error {
@@ -59,7 +59,7 @@ async function embedConfiguredFont(pdfDoc: PDFDocument, fontId: string): Promise
 
 /**
  * Watermarks every page of a PDF and returns the new document bytes. Never
- * mutates `bytes` — always works from a copy so re-export is repeatable.
+ * mutates `bytes`; always works from a copy so re-export is repeatable.
  */
 export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, fileName?: string): Promise<Uint8Array> {
   const copy = bytes.slice(0);
@@ -99,6 +99,7 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
       columns: cfg.columns,
       rows: cfg.rows,
       gapRatio: cfg.gapRatio,
+      fontSize: resolvedFontSize(cfg),
       metrics,
     });
 
@@ -122,8 +123,8 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
 }
 
 /** Triggers a browser download of the given bytes via an object URL, then revokes it. */
-export function downloadBytes(bytes: Uint8Array, fileName: string): void {
-  const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: 'application/pdf' });
+export function downloadBytes(bytes: Uint8Array, fileName: string, mimeType = 'application/pdf'): void {
+  const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
