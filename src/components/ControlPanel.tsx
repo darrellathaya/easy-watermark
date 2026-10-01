@@ -95,6 +95,7 @@ export function ControlPanel() {
                 <span style={{ fontFamily: `"${cssFamilyName(option.value)}", sans-serif` }}>{option.label}</span>
               )}
             />
+            <ColorInput label="Color" value={config.color} onChange={(v) => setConfig({ color: v })} swatches={SWATCHES} />
 
             <Stack gap={6}>
               <Group justify="space-between" wrap="nowrap">
@@ -191,7 +192,6 @@ export function ControlPanel() {
             Appearance
           </Title>
           <Stack gap="md">
-            <ColorInput label="Color" value={config.color} onChange={(v) => setConfig({ color: v })} swatches={SWATCHES} />
             <SliderNumber
               label="Opacity"
               value={config.opacity}
