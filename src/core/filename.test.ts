@@ -38,6 +38,12 @@ describe('expandFilenamePattern', () => {
     expect(expandFilenamePattern('{name}.pdf', 'photo.jpg', 'png')).toBe('photo.png');
   });
 
+  it('gives an image exported as PDF a .pdf name', () => {
+    expect(expandFilenamePattern('{name}_watermarked', 'photo.jpg', 'pdf')).toBe('photo_watermarked.pdf');
+    expect(expandFilenamePattern('{name}', 'photo.png', 'pdf')).toBe('photo.pdf');
+    expect(expandFilenamePattern('{name}.jpg', 'photo.jpg', 'pdf')).toBe('photo.pdf');
+  });
+
   it('leaves a dotted name that is not a known extension alone', () => {
     expect(expandFilenamePattern('report.v2', 'a.pdf')).toBe('report.v2.pdf');
   });

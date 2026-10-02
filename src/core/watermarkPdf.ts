@@ -122,6 +122,40 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
   return pdfDoc.save();
 }
 
+/**
+ * The long edge of a page built around an image, in PDF points: A4's long
+ * edge. Treating pixels as points would make a phone photo a 42-inch page,
+ * so the page is scaled to the image's aspect ratio instead. The embedded
+ * PNG keeps its full resolution either way, so nothing is resampled.
+ */
+const IMAGE_PAGE_LONG_EDGE_PT = 842;
+
+/**
+ * Wraps already-watermarked PNG bytes in a single-page PDF whose page matches
+ * the image's aspect ratio exactly, so the image fills it edge to edge with
+ * no letterboxing and no margins.
+ */
+export async function wrapImageInPdf(pngBytes: Uint8Array, pixelWidth: number, pixelHeight: number): Promise<Uint8Array> {
+  if (pixelWidth <= 0 || pixelHeight <= 0) {
+    throw new Error('Cannot build a PDF page from an image with no dimensions.');
+  }
+
+  const pdfDoc = await PDFDocument.create();
+  // pdf-lib may consume the buffer it's handed; give it a private copy so the
+  // caller's bytes stay reusable.
+  const image = await pdfDoc.embedPng(pngBytes.slice());
+
+  const longEdge = Math.max(pixelWidth, pixelHeight);
+  const scale = IMAGE_PAGE_LONG_EDGE_PT / longEdge;
+  const pageWidth = pixelWidth * scale;
+  const pageHeight = pixelHeight * scale;
+
+  const page = pdfDoc.addPage([pageWidth, pageHeight]);
+  page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
+
+  return pdfDoc.save();
+}
+
 /** Triggers a browser download of the given bytes via an object URL, then revokes it. */
 export function downloadBytes(bytes: Uint8Array, fileName: string, mimeType = 'application/pdf'): void {
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: mimeType });
