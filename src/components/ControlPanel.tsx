@@ -19,7 +19,7 @@ import { SliderNumber } from './SliderNumber';
 import { FONTS, cssFamilyName } from '../core/fonts';
 import { ANGLE_PRESETS, CONFIG_LIMITS, type FontSizeMode } from '../core/watermarkConfig';
 import { applyWatermark, downloadBytes, EncryptedPdfError } from '../core/watermarkPdf';
-import { applyImageWatermark, ImageDecodeError } from '../core/imageWatermark';
+import { exportImage, ImageDecodeError, type ImageExportFormat } from '../core/imageWatermark';
 import { expandFilenamePattern } from '../core/filename';
 
 const SWATCHES = ['#B9B9C2', '#FF6B6B', '#FFD43B', '#69DB7C', '#4DABF7', '#DA77F2', '#212529', '#FFFFFF'];
@@ -36,10 +36,16 @@ export function ControlPanel() {
   const files = useWatermarkStore((s) => s.files);
 
   const [pattern, setPattern] = useState('{name}_watermarked');
+  // UI-only state, like `pattern`: not part of the persisted WatermarkConfig,
+  // which describes the watermark itself rather than the output.
+  const [imageFormat, setImageFormat] = useState<ImageExportFormat>('png');
   const [exporting, setExporting] = useState(false);
   const [results, setResults] = useState<ExportResult[]>([]);
 
   const checkedFiles = files.filter((f) => f.checked && f.status === 'ready');
+  // The format picker only means something once an image is loaded; PDFs
+  // always export as PDF.
+  const hasImages = files.some((f) => f.kind === 'image');
 
   async function handleExport() {
     if (checkedFiles.length === 0) return;
@@ -52,8 +58,8 @@ export function ControlPanel() {
         // An image exports as a PNG at its native resolution; a PDF keeps its
         // own page geometry. Both tile through layout.ts, so they match.
         if (file.kind === 'image') {
-          const bytes = await applyImageWatermark(file.bytes, file.mimeType, config, file.name);
-          downloadBytes(bytes, expandFilenamePattern(pattern, file.name, 'png'), 'image/png');
+          const out = await exportImage(imageFormat, file.bytes, file.mimeType, config, file.name);
+          downloadBytes(out.bytes, expandFilenamePattern(pattern, file.name, out.extension), out.mimeType);
         } else {
           const bytes = await applyWatermark(file.bytes, config, file.name);
           downloadBytes(bytes, expandFilenamePattern(pattern, file.name, 'pdf'));
@@ -209,9 +215,32 @@ export function ControlPanel() {
             Output
           </Title>
           <Stack gap="sm">
+            {hasImages && (
+              <Stack gap={6}>
+                <Group justify="space-between" wrap="nowrap">
+                  <Text size="sm" fw={500}>
+                    Image output
+                  </Text>
+                  <SegmentedControl
+                    size="xs"
+                    value={imageFormat}
+                    onChange={(v) => setImageFormat(v as ImageExportFormat)}
+                    data={[
+                      { value: 'png', label: 'PNG' },
+                      { value: 'pdf', label: 'PDF' },
+                    ]}
+                  />
+                </Group>
+                <Text size="xs" c="dimmed">
+                  {imageFormat === 'pdf'
+                    ? 'Each image becomes a one-page PDF at its own aspect ratio. PDFs are unaffected.'
+                    : 'Images export as lossless PNG. PDFs always export as PDF.'}
+                </Text>
+              </Stack>
+            )}
             <TextInput
               label="Filename pattern"
-              description="Tokens: {name}, {date}. PDFs export as .pdf, images as .png"
+              description="Tokens: {name}, {date}. The extension follows the output format"
               value={pattern}
               onChange={(e) => setPattern(e.currentTarget.value)}
             />

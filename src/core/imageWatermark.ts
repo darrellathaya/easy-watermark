@@ -1,10 +1,17 @@
-// Image watermarking (spec §10 stretch goal): PNG/JPEG/WebP in, PNG out.
+// Image watermarking (spec §10 stretch goal): PNG/JPEG/WebP in, PNG or a
+// single-page PDF out.
 //
-// Output is always PNG: it's lossless, so re-exporting doesn't compound JPEG
-// artifacts, and it preserves an alpha channel the source may have had.
+// The raster output is always PNG, never JPEG: it's lossless, so re-exporting
+// doesn't compound artifacts, and it preserves an alpha channel the source
+// may have had. The PDF output embeds that same PNG, so both formats carry
+// pixel-identical content.
 
 import { drawWatermark } from './canvasWatermark';
+import { wrapImageInPdf } from './watermarkPdf';
 import type { WatermarkConfig } from './watermarkConfig';
+
+/** The formats an image can be exported as. */
+export type ImageExportFormat = 'png' | 'pdf';
 
 export const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'] as const;
@@ -42,16 +49,23 @@ export async function decodeImage(bytes: ArrayBuffer, mimeType: string, fileName
   }
 }
 
+interface WatermarkedImage {
+  /** PNG bytes of the watermarked image, at the source's native resolution. */
+  pngBytes: Uint8Array;
+  pixelWidth: number;
+  pixelHeight: number;
+}
+
 /**
- * Watermarks an image at its native resolution and returns PNG bytes. Never
+ * Watermarks an image at its native resolution and encodes it as PNG. Never
  * mutates `bytes`, so re-export is repeatable.
  */
-export async function applyImageWatermark(
+async function watermarkImage(
   bytes: ArrayBuffer,
   mimeType: string,
   cfg: WatermarkConfig,
   fileName?: string,
-): Promise<Uint8Array> {
+): Promise<WatermarkedImage> {
   const bitmap = await decodeImage(bytes, mimeType, fileName);
 
   const canvas = document.createElement('canvas');
@@ -72,5 +86,56 @@ export async function applyImageWatermark(
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('Could not encode the watermarked image as a PNG.');
-  return new Uint8Array(await blob.arrayBuffer());
+
+  return {
+    pngBytes: new Uint8Array(await blob.arrayBuffer()),
+    pixelWidth: bitmap.width,
+    pixelHeight: bitmap.height,
+  };
+}
+
+/** Watermarks an image and returns PNG bytes. */
+export async function applyImageWatermark(
+  bytes: ArrayBuffer,
+  mimeType: string,
+  cfg: WatermarkConfig,
+  fileName?: string,
+): Promise<Uint8Array> {
+  return (await watermarkImage(bytes, mimeType, cfg, fileName)).pngBytes;
+}
+
+/**
+ * Watermarks an image and returns it as a single-page PDF, with the full
+ * watermarked PNG embedded (no resampling, so no detail is lost).
+ */
+export async function applyImageWatermarkAsPdf(
+  bytes: ArrayBuffer,
+  mimeType: string,
+  cfg: WatermarkConfig,
+  fileName?: string,
+): Promise<Uint8Array> {
+  const { pngBytes, pixelWidth, pixelHeight } = await watermarkImage(bytes, mimeType, cfg, fileName);
+  return wrapImageInPdf(pngBytes, pixelWidth, pixelHeight);
+}
+
+/** Bytes, extension and MIME type for one image export format. */
+export async function exportImage(
+  format: ImageExportFormat,
+  bytes: ArrayBuffer,
+  mimeType: string,
+  cfg: WatermarkConfig,
+  fileName?: string,
+): Promise<{ bytes: Uint8Array; extension: string; mimeType: string }> {
+  if (format === 'pdf') {
+    return {
+      bytes: await applyImageWatermarkAsPdf(bytes, mimeType, cfg, fileName),
+      extension: 'pdf',
+      mimeType: 'application/pdf',
+    };
+  }
+  return {
+    bytes: await applyImageWatermark(bytes, mimeType, cfg, fileName),
+    extension: 'png',
+    mimeType: 'image/png',
+  };
 }
