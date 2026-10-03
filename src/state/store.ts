@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { DEFAULT_WATERMARK_CONFIG, type WatermarkConfig } from '../core/watermarkConfig';
+import type { StampDetection } from '../core/watermarkTag';
+
 
 const STORAGE_KEY = 'easy-watermark:config';
 
@@ -39,6 +41,11 @@ export interface FileEntry {
   pageCount: number | null;
   /** Pixel dimensions, once an image has been decoded. */
   imageSize?: { width: number; height: number };
+  /**
+   * What a previous stamp by this app left in the file. `tagged` means
+   * re-exporting replaces that watermark instead of adding a second one.
+   */
+  stamp?: StampDetection;
   status: FileStatus;
   errorMessage?: string;
   checked: boolean;
@@ -58,7 +65,12 @@ interface WatermarkStore {
   setFileStatus: (
     id: string,
     status: FileStatus,
-    extra?: { pageCount?: number; errorMessage?: string; imageSize?: { width: number; height: number } },
+    extra?: {
+      pageCount?: number;
+      errorMessage?: string;
+      imageSize?: { width: number; height: number };
+      stamp?: StampDetection;
+    },
   ) => void;
   setConfig: (patch: Partial<WatermarkConfig>) => void;
   resetConfig: () => void;
@@ -102,6 +114,7 @@ export const useWatermarkStore = create<WatermarkStore>((set, get) => ({
               status,
               pageCount: extra?.pageCount ?? f.pageCount,
               imageSize: extra?.imageSize ?? f.imageSize,
+              stamp: extra?.stamp ?? f.stamp,
               errorMessage: extra?.errorMessage ?? f.errorMessage,
             }
           : f,

@@ -143,7 +143,7 @@ function FileRow({
               ? (entry.errorMessage ?? 'Failed to load')
               : entry.kind === 'image'
                 ? `${formatSize(entry.size)} · ${entry.imageSize ? `${entry.imageSize.width}×${entry.imageSize.height}` : 'image'}`
-                : `${formatSize(entry.size)} · ${entry.pageCount ?? '…'} pages`}
+                : `${formatSize(entry.size)} · ${entry.pageCount ?? '…'} pages${entry.stamp?.tagged ? ' · watermarked' : ''}`}
         </Text>
       </Stack>
       <ActionIcon variant="subtle" color="gray" size="sm" onClick={(e) => { e.stopPropagation(); onRemove(); }}>
