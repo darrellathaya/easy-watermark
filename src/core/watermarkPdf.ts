@@ -1,9 +1,18 @@
 // pdf-lib export path (spec §6).
 
-import { PDFDocument, EncryptedPDFError as PdfLibEncryptedPDFError, degrees, rgb, type PDFFont } from 'pdf-lib';
+import {
+  PDFDocument,
+  EncryptedPDFError as PdfLibEncryptedPDFError,
+  beginMarkedContent,
+  degrees,
+  endMarkedContent,
+  rgb,
+  type PDFFont,
+} from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { computeWatermarkLayout, type FontMetrics } from './layout';
 import { loadFontBytes, getFontDef } from './fonts';
+import { stripStampedWatermark, WATERMARK_TAG, writeWatermarkMarker } from './watermarkTag';
 import { resolvedFontSize, type WatermarkConfig } from './watermarkConfig';
 
 /** Thrown when a PDF is password/encryption-protected; the UI surfaces this and skips the file. */
@@ -74,6 +83,11 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
     throw err;
   }
 
+  // Replace rather than stack: if this app stamped the file before, remove
+  // that watermark first. Must happen before anything draws on the pages
+  // (stripStampedWatermark rewrites each page's Contents outright).
+  stripStampedWatermark(pdfDoc);
+
   pdfDoc.registerFontkit(fontkit);
   const font = await embedConfiguredFont(pdfDoc, cfg.fontId);
 
@@ -105,6 +119,10 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
 
     const drawAngleDeg = cfg.angle + rotation;
 
+    // Bound this app's operators so a later export can find and remove
+    // exactly them, and nothing of the original page.
+    page.pushOperators(beginMarkedContent(WATERMARK_TAG));
+
     for (const tile of tiles) {
       const { x, y } = visualToContentPoint(tile.x, tile.y, contentW, contentH, rotation);
       page.drawText(cfg.text, {
@@ -117,7 +135,11 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
         rotate: degrees(drawAngleDeg),
       });
     }
+
+    page.pushOperators(endMarkedContent());
   }
+
+  writeWatermarkMarker(pdfDoc, cfg);
 
   return pdfDoc.save();
 }

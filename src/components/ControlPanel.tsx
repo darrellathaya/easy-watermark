@@ -13,7 +13,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconAlertCircle, IconCheck, IconDownload } from '@tabler/icons-react';
+import { IconAlertCircle, IconCheck, IconDownload, IconReplace } from '@tabler/icons-react';
 import { useWatermarkStore } from '../state/store';
 import { SliderNumber } from './SliderNumber';
 import { FONTS, cssFamilyName } from '../core/fonts';
@@ -34,6 +34,7 @@ export function ControlPanel() {
   const config = useWatermarkStore((s) => s.config);
   const setConfig = useWatermarkStore((s) => s.setConfig);
   const files = useWatermarkStore((s) => s.files);
+  const selectedId = useWatermarkStore((s) => s.selectedId);
 
   const [pattern, setPattern] = useState('{name}_watermarked');
   // UI-only state, like `pattern`: not part of the persisted WatermarkConfig,
@@ -46,6 +47,10 @@ export function ControlPanel() {
   // The format picker only means something once an image is loaded; PDFs
   // always export as PDF.
   const hasImages = files.some((f) => f.kind === 'image');
+  // A watermark this app stamped before can be edited: exporting replaces it.
+  const stamp = files.find((f) => f.id === selectedId)?.stamp ?? null;
+  const replaceCount = checkedFiles.filter((f) => f.stamp?.tagged).length;
+  const addCount = checkedFiles.length - replaceCount;
 
   async function handleExport() {
     if (checkedFiles.length === 0) return;
@@ -86,6 +91,22 @@ export function ControlPanel() {
             Text
           </Title>
           <Stack gap="sm">
+            {stamp?.tagged && (
+              <Alert p="xs" color="blue" icon={<IconReplace size={14} />}>
+                <Stack gap={6}>
+                  <Text size="xs">
+                    {stamp.config
+                      ? `This file already carries a watermark from here ("${stamp.config.text}"). Exporting replaces it rather than stacking a second one.`
+                      : 'This file already carries a watermark from here. Exporting replaces it rather than stacking a second one.'}
+                  </Text>
+                  {stamp.config && (
+                    <Button size="compact-xs" variant="light" onClick={() => setConfig(stamp.config!)}>
+                      Load its settings
+                    </Button>
+                  )}
+                </Stack>
+              </Alert>
+            )}
             <TextInput
               label="Watermark text"
               value={config.text}
@@ -252,6 +273,15 @@ export function ControlPanel() {
             >
               Apply & Download{checkedFiles.length > 1 ? ` (${checkedFiles.length})` : ''}
             </Button>
+            {checkedFiles.length > 0 && (
+              // Always state the outcome, so "replaced" vs "added" is visible
+              // before exporting rather than inferred from the result.
+              <Text size="xs" c="dimmed">
+                {replaceCount > 0 && `${replaceCount} of ${checkedFiles.length} will have an existing watermark replaced. `}
+                {addCount > 0 &&
+                  `${addCount} will get a watermark added${replaceCount > 0 ? '' : ' (no earlier watermark from here was found)'}.`}
+              </Text>
+            )}
             {results.map((r) => (
               <Alert
                 key={r.name}

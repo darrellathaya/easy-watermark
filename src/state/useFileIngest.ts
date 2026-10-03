@@ -4,6 +4,7 @@ import { getOrLoadDocument } from '../core/docCache';
 import { getOrDecodeImage } from '../core/imageCache';
 import { ImageDecodeError, imageMimeType, isImageFile } from '../core/imageWatermark';
 import { PasswordProtectedError } from '../core/pdfjs';
+import { detectStampInBytes } from '../core/watermarkTag';
 
 function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
@@ -67,8 +68,12 @@ export function useFileIngest() {
         }
 
         getOrLoadDocument(entry.id, entry.bytes, entry.name)
-          .then((doc) => {
-            setFileStatus(entry.id, 'ready', { pageCount: doc.numPages });
+          .then(async (doc) => {
+            // Probe for a watermark this app stamped earlier, so the UI can
+            // say it will be replaced rather than stacked. A second parse,
+            // but only for PDFs and only once per file.
+            const stamp = await detectStampInBytes(entry.bytes);
+            setFileStatus(entry.id, 'ready', { pageCount: doc.numPages, stamp });
           })
           .catch((err) => {
             if (err instanceof PasswordProtectedError) {

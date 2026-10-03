@@ -2,11 +2,20 @@
 //
 // The worker MUST be resolved via a `?url` import, never a hardcoded path or
 // CDN, so it survives the production build (spec §9.3).
+//
+// Both the library and the worker come from the *legacy* bundle, not the
+// default modern one. pdf.js 6 calls `Map.prototype.getOrInsertComputed`, a
+// TC39 proposal that V8 ships but Gecko does not, so on Firefox (and
+// Firefox-based browsers such as Zen) the modern build dies on load with
+// "this[#methodPromises].getOrInsertComputed is not a function", taking the
+// whole preview and file-ingest path with it. Only the legacy bundle carries
+// the core-js polyfill for it, in both the library and the worker. The API is
+// identical; it costs some bundle size for the polyfills.
 
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 // eslint-disable-next-line import/no-unresolved
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
