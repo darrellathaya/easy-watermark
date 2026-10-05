@@ -3,7 +3,7 @@ import { PDFDocument, StandardFonts, beginMarkedContent, endMarkedContent } from
 import {
   detectStamp,
   readWatermarkMarker,
-  removeTaggedSpansForTests as removeTaggedSpans,
+  removeTaggedSpans,
   stripStampedWatermark,
   WATERMARK_TAG,
   writeWatermarkMarker,

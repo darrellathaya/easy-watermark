@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { DEFAULT_WATERMARK_CONFIG, type WatermarkConfig } from '../core/watermarkConfig';
 import type { StampDetection } from '../core/watermarkTag';
+import type { LegacyScan } from '../core/legacyWatermark';
 
 
 const STORAGE_KEY = 'easy-watermark:config';
@@ -46,6 +47,13 @@ export interface FileEntry {
    * re-exporting replaces that watermark instead of adding a second one.
    */
   stamp?: StampDetection;
+  /**
+   * An untagged watermark from an older version of this app, found by shape
+   * rather than by tag. Heuristic, so removing it is opt-in via `stripLegacy`.
+   */
+  legacy?: LegacyScan;
+  /** Whether the user opted in to removing `legacy` on export. */
+  stripLegacy?: boolean;
   status: FileStatus;
   errorMessage?: string;
   checked: boolean;
@@ -62,6 +70,7 @@ interface WatermarkStore {
   removeFile: (id: string) => void;
   selectFile: (id: string) => void;
   toggleChecked: (id: string) => void;
+  setStripLegacy: (id: string, value: boolean) => void;
   setFileStatus: (
     id: string,
     status: FileStatus,
@@ -70,6 +79,7 @@ interface WatermarkStore {
       errorMessage?: string;
       imageSize?: { width: number; height: number };
       stamp?: StampDetection;
+      legacy?: LegacyScan;
     },
   ) => void;
   setConfig: (patch: Partial<WatermarkConfig>) => void;
@@ -105,6 +115,11 @@ export const useWatermarkStore = create<WatermarkStore>((set, get) => ({
       files: state.files.map((f) => (f.id === id ? { ...f, checked: !f.checked } : f)),
     })),
 
+  setStripLegacy: (id, value) =>
+    set((state) => ({
+      files: state.files.map((f) => (f.id === id ? { ...f, stripLegacy: value } : f)),
+    })),
+
   setFileStatus: (id, status, extra) =>
     set((state) => ({
       files: state.files.map((f) =>
@@ -115,6 +130,7 @@ export const useWatermarkStore = create<WatermarkStore>((set, get) => ({
               pageCount: extra?.pageCount ?? f.pageCount,
               imageSize: extra?.imageSize ?? f.imageSize,
               stamp: extra?.stamp ?? f.stamp,
+              legacy: extra?.legacy ?? f.legacy,
               errorMessage: extra?.errorMessage ?? f.errorMessage,
             }
           : f,

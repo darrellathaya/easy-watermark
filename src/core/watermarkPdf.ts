@@ -13,6 +13,15 @@ import fontkit from '@pdf-lib/fontkit';
 import { computeWatermarkLayout, type FontMetrics } from './layout';
 import { loadFontBytes, getFontDef } from './fonts';
 import { stripStampedWatermark, WATERMARK_TAG, writeWatermarkMarker } from './watermarkTag';
+import { stripLegacyWatermark } from './legacyWatermark';
+
+export interface ApplyWatermarkOptions {
+  /**
+   * Also remove an untagged watermark left by a version of this app that
+   * predates the content tag. Heuristic, so it's opt-in per file.
+   */
+  stripLegacy?: boolean;
+}
 import { resolvedFontSize, type WatermarkConfig } from './watermarkConfig';
 
 /** Thrown when a PDF is password/encryption-protected; the UI surfaces this and skips the file. */
@@ -70,7 +79,12 @@ async function embedConfiguredFont(pdfDoc: PDFDocument, fontId: string): Promise
  * Watermarks every page of a PDF and returns the new document bytes. Never
  * mutates `bytes`; always works from a copy so re-export is repeatable.
  */
-export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, fileName?: string): Promise<Uint8Array> {
+export async function applyWatermark(
+  bytes: ArrayBuffer,
+  cfg: WatermarkConfig,
+  fileName?: string,
+  options: ApplyWatermarkOptions = {},
+): Promise<Uint8Array> {
   const copy = bytes.slice(0);
 
   let pdfDoc: PDFDocument;
@@ -85,8 +99,9 @@ export async function applyWatermark(bytes: ArrayBuffer, cfg: WatermarkConfig, f
 
   // Replace rather than stack: if this app stamped the file before, remove
   // that watermark first. Must happen before anything draws on the pages
-  // (stripStampedWatermark rewrites each page's Contents outright).
+  // (both strippers rewrite each page's Contents outright).
   stripStampedWatermark(pdfDoc);
+  if (options.stripLegacy) stripLegacyWatermark(pdfDoc);
 
   pdfDoc.registerFontkit(fontkit);
   const font = await embedConfiguredFont(pdfDoc, cfg.fontId);

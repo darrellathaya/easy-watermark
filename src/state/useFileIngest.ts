@@ -4,7 +4,7 @@ import { getOrLoadDocument } from '../core/docCache';
 import { getOrDecodeImage } from '../core/imageCache';
 import { ImageDecodeError, imageMimeType, isImageFile } from '../core/imageWatermark';
 import { PasswordProtectedError } from '../core/pdfjs';
-import { detectStampInBytes } from '../core/watermarkTag';
+import { probeWatermarks } from '../core/watermarkProbe';
 
 function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
@@ -72,8 +72,14 @@ export function useFileIngest() {
             // Probe for a watermark this app stamped earlier, so the UI can
             // say it will be replaced rather than stacked. A second parse,
             // but only for PDFs and only once per file.
-            const stamp = await detectStampInBytes(entry.bytes);
-            setFileStatus(entry.id, 'ready', { pageCount: doc.numPages, stamp });
+            // One pdf-lib parse answers both questions: is there a tagged
+            // watermark to replace, or an untagged one from an older version.
+            const { stamp, legacy } = await probeWatermarks(entry.bytes);
+            setFileStatus(entry.id, 'ready', {
+              pageCount: doc.numPages,
+              stamp,
+              legacy: legacy ?? undefined,
+            });
           })
           .catch((err) => {
             if (err instanceof PasswordProtectedError) {

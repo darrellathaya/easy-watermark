@@ -115,25 +115,24 @@ export function* scanOperators(content: string): Generator<{ op: string; start: 
 }
 
 /**
- * Spans of the outermost balanced `q ... Q` blocks. Nested saves are folded
- * into their enclosing block, and an unbalanced `Q` resets the depth rather
- * than throwing the rest of the page off.
+ * Spans of every balanced `q ... Q` block, at any nesting depth.
+ *
+ * Nested blocks matter: pdf-lib wraps a page's existing content in an outer
+ * `q ... Q` pair when it appends to it, so after one round trip everything
+ * original sits one level down. Scanning only the outermost blocks would see
+ * a single giant block and miss what's inside. An unbalanced `Q` is ignored
+ * rather than throwing the rest of the page off.
  */
-export function topLevelSaveBlocks(content: string): Array<[number, number]> {
+export function allSaveBlocks(content: string): Array<[number, number]> {
   const blocks: Array<[number, number]> = [];
-  let depth = 0;
-  let start = -1;
+  const open: number[] = [];
 
   for (const token of scanOperators(content)) {
     if (token.op === 'q') {
-      if (depth === 0) start = token.start;
-      depth++;
+      open.push(token.start);
     } else if (token.op === 'Q') {
-      depth = Math.max(0, depth - 1);
-      if (depth === 0 && start >= 0) {
-        blocks.push([start, token.end]);
-        start = -1;
-      }
+      const start = open.pop();
+      if (start !== undefined) blocks.push([start, token.end]);
     }
   }
 
