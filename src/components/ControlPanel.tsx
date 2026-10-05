@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Alert,
   Button,
+  Checkbox,
   ColorInput,
   Divider,
   Group,
@@ -35,6 +36,7 @@ export function ControlPanel() {
   const setConfig = useWatermarkStore((s) => s.setConfig);
   const files = useWatermarkStore((s) => s.files);
   const selectedId = useWatermarkStore((s) => s.selectedId);
+  const setStripLegacy = useWatermarkStore((s) => s.setStripLegacy);
 
   const [pattern, setPattern] = useState('{name}_watermarked');
   // UI-only state, like `pattern`: not part of the persisted WatermarkConfig,
@@ -48,8 +50,10 @@ export function ControlPanel() {
   // always export as PDF.
   const hasImages = files.some((f) => f.kind === 'image');
   // A watermark this app stamped before can be edited: exporting replaces it.
-  const stamp = files.find((f) => f.id === selectedId)?.stamp ?? null;
-  const replaceCount = checkedFiles.filter((f) => f.stamp?.tagged).length;
+  const selected = files.find((f) => f.id === selectedId) ?? null;
+  const stamp = selected?.stamp ?? null;
+  const legacy = selected?.legacy ?? null;
+  const replaceCount = checkedFiles.filter((f) => f.stamp?.tagged || (f.legacy && f.stripLegacy)).length;
   const addCount = checkedFiles.length - replaceCount;
 
   async function handleExport() {
@@ -66,7 +70,9 @@ export function ControlPanel() {
           const out = await exportImage(imageFormat, file.bytes, file.mimeType, config, file.name);
           downloadBytes(out.bytes, expandFilenamePattern(pattern, file.name, out.extension), out.mimeType);
         } else {
-          const bytes = await applyWatermark(file.bytes, config, file.name);
+          const bytes = await applyWatermark(file.bytes, config, file.name, {
+            stripLegacy: file.stripLegacy ?? false,
+          });
           downloadBytes(bytes, expandFilenamePattern(pattern, file.name, 'pdf'));
         }
         nextResults.push({ name: file.name, status: 'ok' });
@@ -104,6 +110,24 @@ export function ControlPanel() {
                       Load its settings
                     </Button>
                   )}
+                </Stack>
+              </Alert>
+            )}
+            {!stamp?.tagged && legacy && (
+              <Alert p="xs" color="yellow" icon={<IconReplace size={14} />}>
+                <Stack gap={6}>
+                  <Text size="xs">
+                    Found {legacy.blocks} repeated semi-transparent text block
+                    {legacy.blocks === 1 ? '' : 's'} across {legacy.pages} page
+                    {legacy.pages === 1 ? '' : 's'}, which looks like a watermark from an older version of
+                    this app. It carries no tag, so this is a guess based on its shape.
+                  </Text>
+                  <Checkbox
+                    size="xs"
+                    label="Remove it before applying the new watermark"
+                    checked={selected?.stripLegacy ?? false}
+                    onChange={(e) => selected && setStripLegacy(selected.id, e.currentTarget.checked)}
+                  />
                 </Stack>
               </Alert>
             )}

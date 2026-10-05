@@ -69,10 +69,10 @@ export function readWatermarkMarker(pdfDoc: PDFDocument): WatermarkConfig | null
 }
 
 /**
- * Removes every `/EasyWatermark BMC ... EMC` span from `content`, matching
- * nesting so an inner marked-content sequence can't end the span early.
+ * Spans of every `/EasyWatermark BMC ... EMC` sequence in `content`, matching
+ * nesting so an inner marked-content sequence can't end a span early.
  */
-function removeTaggedSpans(content: string): { content: string; removed: number } {
+export function findTaggedSpans(content: string): Array<[number, number]> {
   const opener = new RegExp(`/${WATERMARK_TAG}\\s+BMC`, 'g');
   const spans: Array<[number, number]> = [];
 
@@ -98,6 +98,12 @@ function removeTaggedSpans(content: string): { content: string; removed: number 
     opener.lastIndex = end;
   }
 
+  return spans;
+}
+
+/** Drops every tagged span, leaving the rest of the content byte for byte. */
+export function removeTaggedSpans(content: string): { content: string; removed: number } {
+  const spans = findTaggedSpans(content);
   // Back to front, so earlier offsets stay valid.
   let out = content;
   for (let i = spans.length - 1; i >= 0; i--) {
@@ -156,7 +162,6 @@ export function stripStampedWatermark(pdfDoc: PDFDocument): number {
   return removed;
 }
 
-export { removeTaggedSpans as removeTaggedSpansForTests };
 
 /**
  * Probes raw PDF bytes at load time for a previous stamp by this app. Returns
