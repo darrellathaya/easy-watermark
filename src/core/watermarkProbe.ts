@@ -2,20 +2,21 @@
 // app, so ingest parses the file once rather than once per question.
 
 import { PDFDocument } from 'pdf-lib';
-import { scanLegacyWatermark, type LegacyScan } from './legacyWatermark';
+import { scanWatermarks, type WatermarkFinding } from './removeWatermark';
 import { detectStamp, type StampDetection } from './watermarkTag';
 
 export interface WatermarkProbe {
   /** A tagged watermark, which a re-export replaces exactly. */
   stamp: StampDetection;
   /**
-   * An untagged watermark from an older version, found by shape. Only looked
-   * for when there's no tagged one: a tagged file needs no guessing.
+   * Watermarks this app didn't apply, by strategy: annotations, regions the
+   * file labels as watermarks, and repeated tiles. A tagged watermark of our
+   * own is excluded, since it's removed exactly rather than guessed at.
    */
-  legacy: LegacyScan | null;
+  findings: WatermarkFinding[];
 }
 
-const NOTHING: WatermarkProbe = { stamp: { tagged: false, config: null }, legacy: null };
+const NOTHING: WatermarkProbe = { stamp: { tagged: false, config: null }, findings: [] };
 
 /**
  * Probes raw PDF bytes for a previous watermark by this app. Returns a
@@ -25,8 +26,7 @@ const NOTHING: WatermarkProbe = { stamp: { tagged: false, config: null }, legacy
 export async function probeWatermarks(bytes: ArrayBuffer): Promise<WatermarkProbe> {
   try {
     const pdfDoc = await PDFDocument.load(bytes.slice(0), { ignoreEncryption: false });
-    const stamp = detectStamp(pdfDoc);
-    return { stamp, legacy: stamp.tagged ? null : scanLegacyWatermark(pdfDoc) };
+    return { stamp: detectStamp(pdfDoc), findings: scanWatermarks(pdfDoc) };
   } catch {
     return NOTHING;
   }

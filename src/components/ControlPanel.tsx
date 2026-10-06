@@ -11,15 +11,16 @@ import {
   Select,
   Stack,
   Text,
+  Textarea,
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconAlertCircle, IconCheck, IconDownload, IconReplace } from '@tabler/icons-react';
+import { IconAlertCircle, IconCheck, IconDownload, IconEraser, IconReplace } from '@tabler/icons-react';
 import { useWatermarkStore } from '../state/store';
 import { SliderNumber } from './SliderNumber';
 import { FONTS, cssFamilyName } from '../core/fonts';
 import { ANGLE_PRESETS, CONFIG_LIMITS, type FontSizeMode } from '../core/watermarkConfig';
-import { applyWatermark, downloadBytes, EncryptedPdfError } from '../core/watermarkPdf';
+import { applyWatermark, downloadBytes, EncryptedPdfError, stripWatermarksOnly } from '../core/watermarkPdf';
 import { exportImage, ImageDecodeError, type ImageExportFormat } from '../core/imageWatermark';
 import { expandFilenamePattern } from '../core/filename';
 
@@ -36,7 +37,7 @@ export function ControlPanel() {
   const setConfig = useWatermarkStore((s) => s.setConfig);
   const files = useWatermarkStore((s) => s.files);
   const selectedId = useWatermarkStore((s) => s.selectedId);
-  const setStripLegacy = useWatermarkStore((s) => s.setStripLegacy);
+  const toggleRemoveKind = useWatermarkStore((s) => s.toggleRemoveKind);
 
   const [pattern, setPattern] = useState('{name}_watermarked');
   // UI-only state, like `pattern`: not part of the persisted WatermarkConfig,
@@ -52,9 +53,50 @@ export function ControlPanel() {
   // A watermark this app stamped before can be edited: exporting replaces it.
   const selected = files.find((f) => f.id === selectedId) ?? null;
   const stamp = selected?.stamp ?? null;
-  const legacy = selected?.legacy ?? null;
-  const replaceCount = checkedFiles.filter((f) => f.stamp?.tagged || (f.legacy && f.stripLegacy)).length;
+  const findings = selected?.findings ?? [];
+  const removeKinds = selected?.removeKinds ?? [];
+  const replaceCount = checkedFiles.filter(
+    (f) => f.stamp?.tagged || (f.removeKinds?.length ?? 0) > 0,
+  ).length;
   const addCount = checkedFiles.length - replaceCount;
+  const anyRemovals = checkedFiles.some((f) => f.stamp?.tagged || (f.removeKinds?.length ?? 0) > 0);
+
+  /** Exports with watermarks removed and no new one applied. */
+  async function handleRemoveOnly() {
+    if (checkedFiles.length === 0) return;
+    setExporting(true);
+    setResults([]);
+    const nextResults: ExportResult[] = [];
+
+    for (const file of checkedFiles) {
+      if (file.kind === 'image') {
+        nextResults.push({
+          name: file.name,
+          status: 'skipped',
+          message: "an image's watermark is part of the pixels and can't be removed",
+        });
+        continue;
+      }
+      try {
+        const { bytes, removed } = await stripWatermarksOnly(file.bytes, file.removeKinds ?? [], file.name);
+        if (removed === 0) {
+          nextResults.push({ name: file.name, status: 'skipped', message: 'nothing selected to remove' });
+          continue;
+        }
+        downloadBytes(bytes, expandFilenamePattern(pattern, file.name, 'pdf'));
+        nextResults.push({ name: file.name, status: 'ok', message: `${removed} removed` });
+      } catch (err) {
+        if (err instanceof EncryptedPdfError) {
+          nextResults.push({ name: file.name, status: 'skipped', message: err.message });
+        } else {
+          nextResults.push({ name: file.name, status: 'error', message: err instanceof Error ? err.message : String(err) });
+        }
+      }
+    }
+
+    setResults(nextResults);
+    setExporting(false);
+  }
 
   async function handleExport() {
     if (checkedFiles.length === 0) return;
@@ -71,7 +113,7 @@ export function ControlPanel() {
           downloadBytes(out.bytes, expandFilenamePattern(pattern, file.name, out.extension), out.mimeType);
         } else {
           const bytes = await applyWatermark(file.bytes, config, file.name, {
-            stripLegacy: file.stripLegacy ?? false,
+            remove: file.removeKinds ?? [],
           });
           downloadBytes(bytes, expandFilenamePattern(pattern, file.name, 'pdf'));
         }
@@ -113,26 +155,39 @@ export function ControlPanel() {
                 </Stack>
               </Alert>
             )}
-            {!stamp?.tagged && legacy && (
-              <Alert p="xs" color="yellow" icon={<IconReplace size={14} />}>
+            {findings.length > 0 && (
+              <Alert p="xs" color="yellow" icon={<IconEraser size={14} />}>
                 <Stack gap={6}>
-                  <Text size="xs">
-                    Found {legacy.blocks} repeated semi-transparent text block
-                    {legacy.blocks === 1 ? '' : 's'} across {legacy.pages} page
-                    {legacy.pages === 1 ? '' : 's'}, which looks like a watermark from an older version of
-                    this app. It carries no tag, so this is a guess based on its shape.
+                  <Text size="xs" fw={500}>
+                    This file already carries a watermark
                   </Text>
-                  <Checkbox
-                    size="xs"
-                    label="Remove it before applying the new watermark"
-                    checked={selected?.stripLegacy ?? false}
-                    onChange={(e) => selected && setStripLegacy(selected.id, e.currentTarget.checked)}
-                  />
+                  {findings.map((f) => (
+                    <Checkbox
+                      key={f.kind}
+                      size="xs"
+                      checked={removeKinds.includes(f.kind)}
+                      onChange={() => selected && toggleRemoveKind(selected.id, f.kind)}
+                      label={
+                        <Text size="xs">
+                          Remove {f.detail}
+                          <Text span c="dimmed">
+                            {f.declared
+                              ? ' (the file labels this a watermark)'
+                              : ' (inferred from its shape, so a guess)'}
+                          </Text>
+                        </Text>
+                      }
+                    />
+                  ))}
                 </Stack>
               </Alert>
             )}
-            <TextInput
+            <Textarea
               label="Watermark text"
+              description="Long text wraps automatically; press Enter to break lines yourself"
+              autosize
+              minRows={1}
+              maxRows={6}
               value={config.text}
               onChange={(e) => setConfig({ text: e.currentTarget.value })}
             />
@@ -296,6 +351,15 @@ export function ControlPanel() {
               disabled={checkedFiles.length === 0}
             >
               Apply & Download{checkedFiles.length > 1 ? ` (${checkedFiles.length})` : ''}
+            </Button>
+            <Button
+              variant="default"
+              leftSection={<IconEraser size={16} />}
+              onClick={handleRemoveOnly}
+              loading={exporting}
+              disabled={!anyRemovals}
+            >
+              Remove watermarks only
             </Button>
             {checkedFiles.length > 0 && (
               // Always state the outcome, so "replaced" vs "added" is visible

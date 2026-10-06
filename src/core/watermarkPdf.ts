@@ -13,14 +13,14 @@ import fontkit from '@pdf-lib/fontkit';
 import { computeWatermarkLayout, type FontMetrics } from './layout';
 import { loadFontBytes, getFontDef } from './fonts';
 import { stripStampedWatermark, WATERMARK_TAG, writeWatermarkMarker } from './watermarkTag';
-import { stripLegacyWatermark } from './legacyWatermark';
+import { removeWatermarks, type WatermarkKind } from './removeWatermark';
 
 export interface ApplyWatermarkOptions {
   /**
-   * Also remove an untagged watermark left by a version of this app that
-   * predates the content tag. Heuristic, so it's opt-in per file.
+   * Also remove watermarks this app didn't apply, by strategy. Opt-in per
+   * file, since the inferred strategies are heuristics.
    */
-  stripLegacy?: boolean;
+  remove?: readonly WatermarkKind[];
 }
 import { resolvedFontSize, type WatermarkConfig } from './watermarkConfig';
 
@@ -191,6 +191,30 @@ export async function wrapImageInPdf(pngBytes: Uint8Array, pixelWidth: number, p
   page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
 
   return pdfDoc.save();
+}
+
+/**
+ * Removes watermarks without applying a new one: this app's own tagged
+ * watermark always, plus the selected general strategies. Returns the new
+ * document bytes and how many items were removed.
+ */
+export async function stripWatermarksOnly(
+  bytes: ArrayBuffer,
+  kinds: readonly WatermarkKind[],
+  fileName?: string,
+): Promise<{ bytes: Uint8Array; removed: number }> {
+  let pdfDoc: PDFDocument;
+  try {
+    pdfDoc = await PDFDocument.load(bytes.slice(0), { ignoreEncryption: false });
+  } catch (err) {
+    if (err instanceof PdfLibEncryptedPDFError) throw new EncryptedPdfError(fileName);
+    throw err;
+  }
+
+  let removed = stripStampedWatermark(pdfDoc);
+  if (kinds.length) removed += removeWatermarks(pdfDoc, kinds);
+
+  return { bytes: await pdfDoc.save(), removed };
 }
 
 /** Triggers a browser download of the given bytes via an object URL, then revokes it. */
