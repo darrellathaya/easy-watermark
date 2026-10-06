@@ -74,12 +74,8 @@ export function useFileIngest() {
             // but only for PDFs and only once per file.
             // One pdf-lib parse answers both questions: is there a tagged
             // watermark to replace, or an untagged one from an older version.
-            const { stamp, legacy } = await probeWatermarks(entry.bytes);
-            setFileStatus(entry.id, 'ready', {
-              pageCount: doc.numPages,
-              stamp,
-              legacy: legacy ?? undefined,
-            });
+            const { stamp, findings } = await probeWatermarks(entry.bytes);
+            setFileStatus(entry.id, 'ready', { pageCount: doc.numPages, stamp, findings });
           })
           .catch((err) => {
             if (err instanceof PasswordProtectedError) {

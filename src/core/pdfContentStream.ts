@@ -138,3 +138,68 @@ export function allSaveBlocks(content: string): Array<[number, number]> {
 
   return blocks;
 }
+
+/**
+ * Yields every marked-content opener (`BMC`/`BDC`) with the operand text that
+ * precedes it, so a caller can decide whether the sequence is interesting
+ * without parsing operands itself. For `/Artifact <</Subtype /Watermark>> BDC`
+ * the operands are `/Artifact <</Subtype /Watermark>> `.
+ */
+export function* markedContentOpeners(
+  content: string,
+): Generator<{ operands: string; start: number; end: number }> {
+  let prevEnd = 0;
+  for (const token of scanOperators(content)) {
+    if (token.op === 'BMC' || token.op === 'BDC') {
+      yield { operands: content.slice(prevEnd, token.start), start: token.start, end: token.end };
+    }
+    prevEnd = token.end;
+  }
+}
+
+/**
+ * Spans of every marked-content sequence whose operands satisfy `matches`,
+ * from the start of the operands through the matching `EMC`.
+ *
+ * Nesting is tracked, so an inner sequence can't end an outer one early; an
+ * unterminated sequence is skipped rather than cutting to the end of the page.
+ */
+export function findMarkedContentSpans(
+  content: string,
+  matches: (operands: string) => boolean,
+): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+
+  for (const opener of markedContentOpeners(content)) {
+    if (!matches(opener.operands)) continue;
+    // Start where the operands begin, so the whole sequence goes and no
+    // orphan operand text is left behind before the removed body.
+    const start = opener.start - opener.operands.trimStart().length;
+
+    let depth = 1;
+    let end = -1;
+    for (const token of scanOperators(content.slice(opener.end))) {
+      if (token.op === 'BMC' || token.op === 'BDC') depth++;
+      else if (token.op === 'EMC') {
+        depth--;
+        if (depth === 0) {
+          end = opener.end + token.end;
+          break;
+        }
+      }
+    }
+
+    if (end < 0) continue;
+    spans.push([Math.max(0, start), end]);
+  }
+
+  return spans;
+}
+
+/** Removes the given spans, back to front so earlier offsets stay valid. */
+export function removeSpans(content: string, spans: Array<[number, number]>): { content: string; removed: number } {
+  const ordered = [...spans].sort((a, b) => b[0] - a[0]);
+  let out = content;
+  for (const [start, end] of ordered) out = out.slice(0, start) + out.slice(end);
+  return { content: out, removed: ordered.length };
+}
