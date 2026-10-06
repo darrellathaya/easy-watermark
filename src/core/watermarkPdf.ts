@@ -101,14 +101,15 @@ export async function applyWatermark(
   // that watermark first. Must happen before anything draws on the pages
   // (both strippers rewrite each page's Contents outright).
   stripStampedWatermark(pdfDoc);
-  if (options.stripLegacy) stripLegacyWatermark(pdfDoc);
+  if (options.remove?.length) removeWatermarks(pdfDoc, options.remove);
 
   pdfDoc.registerFontkit(fontkit);
   const font = await embedConfiguredFont(pdfDoc, cfg.fontId);
 
-  const unitWidth = font.widthOfTextAtSize(cfg.text, 100) / 100;
-  const capHeight = font.heightAtSize(1);
-  const metrics: FontMetrics = { unitWidth, capHeight };
+  const metrics: FontMetrics = {
+    measure: (line) => font.widthOfTextAtSize(line, 100) / 100,
+    capHeight: font.heightAtSize(1),
+  };
 
   const { r, g, b } = hexToRgb01(cfg.color);
   const color = rgb(r, g, b);
@@ -128,6 +129,7 @@ export async function applyWatermark(
       columns: cfg.columns,
       rows: cfg.rows,
       gapRatio: cfg.gapRatio,
+      maxLines: cfg.maxLines,
       fontSize: resolvedFontSize(cfg),
       metrics,
     });
@@ -140,7 +142,9 @@ export async function applyWatermark(
 
     for (const tile of tiles) {
       const { x, y } = visualToContentPoint(tile.x, tile.y, contentW, contentH, rotation);
-      page.drawText(cfg.text, {
+      // One line per tile, so pdf-lib never does its own newline handling
+      // (which the canvas preview has no equivalent for).
+      page.drawText(tile.text, {
         x,
         y,
         size: fontSize,

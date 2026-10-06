@@ -14,6 +14,11 @@ export interface WatermarkConfig {
   fontSizeMode: FontSizeMode;
   /** Font size in PDF points, 4–400. Only used when fontSizeMode is 'fixed'. */
   fontSize: number;
+  /**
+   * Most lines a long watermark may wrap onto, 1–6. 1 never wraps. Manual
+   * line breaks in the text are always honoured regardless.
+   */
+  maxLines: number;
   /** 1–12 integer, horizontal repeats; controls watermark WIDTH. */
   columns: number;
   /** 1–40 integer, vertical repeats; controls how many diagonal rows. */
@@ -33,6 +38,7 @@ export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   fontId: DEFAULT_FONT_ID,
   fontSizeMode: 'auto',
   fontSize: 48,
+  maxLines: 3,
   columns: 4,
   rows: 8,
   angle: -45,
@@ -45,6 +51,7 @@ export const CONFIG_LIMITS = {
   // Shares FONT_SIZE_RANGE with layout.ts, so the input can't ask for a size
   // the layout would silently clamp away.
   fontSize: { ...FONT_SIZE_RANGE, step: 1 },
+  maxLines: { min: 1, max: 6, step: 1 },
   columns: { min: 1, max: 12, step: 1 },
   rows: { min: 1, max: 40, step: 1 },
   angle: { min: -90, max: 90, step: 1 },
