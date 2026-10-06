@@ -49,6 +49,7 @@ export function drawWatermarkSync(
     columns: config.columns,
     rows: config.rows,
     gapRatio: config.gapRatio,
+    maxLines: config.maxLines,
     fontSize: resolvedFontSize(config),
     metrics,
   });
@@ -71,7 +72,7 @@ export function drawWatermarkSync(
     ctx.save();
     ctx.translate(xPx, yPx);
     ctx.rotate(-angleRad);
-    ctx.fillText(config.text, 0, 0);
+    ctx.fillText(tile.text, 0, 0);
     ctx.restore();
   }
 

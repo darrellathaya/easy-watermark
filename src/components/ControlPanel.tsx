@@ -218,6 +218,12 @@ export function ControlPanel() {
                   ]}
                 />
               </Group>
+              <SliderNumber
+                label="Max lines"
+                value={config.maxLines}
+                onChange={(v) => setConfig({ maxLines: v })}
+                {...CONFIG_LIMITS.maxLines}
+              />
               {config.fontSizeMode === 'fixed' ? (
                 <SliderNumber
                   label="Size"
