@@ -24,7 +24,7 @@
 // Shown text is never decoded. A subsetted font stores glyph ids rather than
 // characters, so runs are compared to each other byte for byte instead.
 
-import { PDFArray, PDFDict, PDFName, PDFRef, type PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFName, PDFRef, type PDFDocument } from '@cantoo/pdf-lib';
 import {
   allSaveBlocks,
   findMarkedContentSpans,
