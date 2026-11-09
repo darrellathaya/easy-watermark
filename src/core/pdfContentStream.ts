@@ -5,7 +5,7 @@
 // byte to one char, so string offsets stay byte-exact and slicing a span out
 // of a stream can't corrupt the bytes around it.
 
-import { PDFArray, PDFName, PDFRawStream, decodePDFRawStream, type PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFName, PDFRawStream, decodePDFRawStream, type PDFDocument } from '@cantoo/pdf-lib';
 
 export function bytesToLatin1(bytes: Uint8Array): string {
   let out = '';
