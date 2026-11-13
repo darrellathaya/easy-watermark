@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { PDFDocument, PDFName, PDFOperator, PDFOperatorNames, StandardFonts, degrees, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFOperator, PDFOperatorNames, StandardFonts, degrees, rgb } from '@cantoo/pdf-lib';
 
 /**
  * Emits a raw marked-content operator, standing in for another producer's
@@ -22,7 +22,10 @@ import { MIN_REPEATS_PER_PAGE, removeWatermarks, scanWatermarks, type WatermarkK
 import { readPageContent, scanOperators } from './pdfContentStream';
 import { applyWatermark, stripWatermarksOnly } from './watermarkPdf';
 import { detectStampInBytes } from './watermarkTag';
-import { DEFAULT_WATERMARK_CONFIG } from './watermarkConfig';
+import { DEFAULT_WATERMARK_CONFIG, type WatermarkConfig } from './watermarkConfig';
+
+// Node environment: no canvas, so the hardened (rasterized) path is pinned off.
+const NO_CANVAS: WatermarkConfig = { ...DEFAULT_WATERMARK_CONFIG, hardenWatermark: false };
 
 beforeAll(() => {
   globalThis.fetch = ((input: RequestInfo | URL) => {
@@ -220,7 +223,7 @@ describe('interaction with this app’s own watermark', () => {
     const saved = await doc.save();
     const source = saved.buffer.slice(saved.byteOffset, saved.byteOffset + saved.byteLength) as ArrayBuffer;
 
-    const stamped = await applyWatermark(source, DEFAULT_WATERMARK_CONFIG, 'a.pdf');
+    const stamped = await applyWatermark(source, NO_CANVAS, 'a.pdf');
     const reloaded = await PDFDocument.load(stamped.slice().buffer);
 
     // Tagged content is handled exactly by watermarkTag.ts, so the general
@@ -260,7 +263,7 @@ describe('replacing a foreign watermark through the real export path', () => {
     const source = await foreignWatermarked();
     expect((await detectStampInBytes(source)).tagged).toBe(false);
 
-    const out = await applyWatermark(source, { ...DEFAULT_WATERMARK_CONFIG, text: 'OURS' }, 'in.pdf', {
+    const out = await applyWatermark(source, { ...NO_CANVAS, text: 'OURS' }, 'in.pdf', {
       remove: ['repeatedText'],
     });
     const result = out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
@@ -280,7 +283,7 @@ describe('replacing a foreign watermark through the real export path', () => {
   });
 
   it('leaves the foreign watermark alone when it was not selected', async () => {
-    const out = await applyWatermark(await foreignWatermarked(), DEFAULT_WATERMARK_CONFIG, 'in.pdf');
+    const out = await applyWatermark(await foreignWatermarked(), NO_CANVAS, 'in.pdf');
     const result = out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
 
     // Removal is opt-in, so the original 16 tiles are still counted, and the
